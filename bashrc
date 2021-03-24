@@ -23,7 +23,7 @@ alias tgp="tg plan"
 alias tfp="tf plan -out=tf.plan"
 alias tfa="tf apply tf.plan"
 alias rb=". ~/.bashrc"
-alias tgo="tmux new -s aidan"
+alias tgo="tmux -vv new -s seun"
 
 alias fn="find -name $1"
 
