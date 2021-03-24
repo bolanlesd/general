@@ -23,7 +23,7 @@ alias tgp="tg plan"
 alias tfp="tf plan -out=tf.plan"
 alias tfa="tf apply tf.plan"
 alias rb=". ~/.bashrc"
-alias tgo="tmux -vv new -s aidan"
+alias tgo="tmux -vv new -s seun"
 
 alias ssm="aws ssm start-session --target $i"
 
