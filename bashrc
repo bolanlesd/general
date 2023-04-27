@@ -139,14 +139,14 @@ alias ep="kubectl exec -it $1 /bin/sh"
 alias gwr="git ls-files | xargs sed -i 's/[[:space:]]\+$//'"
 alias t2s="for i in $(git ls-files | grep "tf$\|hcl$"); do sed -i 's/\t/  /g' $i; done"
 
-function fixb() {
-  gwr
-  gaa
-  gco fix removing trailing spaces
-  t2s
-  gaa
-  fco fix converting tabs to spaces
-}
+# function fixb() {
+#   gwr
+#   gaa
+#   gco fix removing trailing spaces
+#   t2s
+#   gaa
+#   fco fix converting tabs to spaces
+# }
 
 function awsp() {
   ENV="${1:-default}"
