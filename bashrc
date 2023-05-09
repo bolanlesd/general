@@ -232,3 +232,5 @@ done | grep "Hosted Zone\|$1" | grep -B1 "$1"
 #set clipboard+=unnamedplus
 source <(kubectl completion bash)
 complete -C aws_completer aws
+
+alias synctime="sudo apt install ntpdate && sudo ntpdate pool.ntp.org"
