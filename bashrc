@@ -4,26 +4,31 @@ export EDITOR="$VISUAL"
 #alias ms="minikube start --extra-config=controller-manager.HorizontalPodAutoscalerUseRESTClients=true; minikube addons enable ingress"
 alias ms="minikube start; minikube addons enable ingress"
 
-alias gl="git log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
+alias getmyip="curl ifconfig.me"
+alias gl="git log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commicd /h t"
 alias gdm="git log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit master.."
 alias gs="git status"
 alias gat="git ls-files --modified | xargs git add"
 alias gaa="git add -u"
 alias gb="git branch | grep \"*\" | cut -d ' ' -f2"
 function gco() {
-  BRANCH=$(gb)
-  FUNCTION=$1
-  COMMENT="${@:2}"
+  local BRANCH=$(gb)
+  local FUNCTION=$1
+  local COMMENT="${@:2}"
   git commit -m "$FUNCTION: $BRANCH: $COMMENT"
 }
 
 alias tf="terraform"
-alias tg="terragrunt"
-alias tgp="tg plan"
+alias tg="terragrunt --terragrunt-forward-tf-stdout "
+alias tgp="tg plan -parallelism=100"
+tgpt() {
+    terragrunt plan -target="$1"
+}
+
 alias tfp="tf plan -out=tf.plan"
 alias tfa="tf apply tf.plan"
-alias rb=". ~/.bashrc"
-alias tgo="tmux -vv new -s seun"
+alias rb=". ~/.bashrc; . .bash_profile"
+alias tgo="tmux new -s seun"
 
 alias fn="find -name $1"
 
@@ -51,7 +56,8 @@ function hc() {
 }
 
 function gg() {
-  git grep -i -n $1 -- `git rev-parse --show-toplevel`
+  local TEXT="${@:1}"
+  git grep -i -n "$TEXT" -- `git rev-parse --show-toplevel`
 }
 
 function insid() {
@@ -131,13 +137,20 @@ function tff() {
   done
 }
 
-alias tcp="tmux show-buffer | xclip -sel clip -i"
+function tcp() {
+  if [ "$(uname -s)" = "Linux" ]; then
+    tmux show-buffer | xclip -sel clip -i
+  else
+    tmux show-buffer | pbcopy
+  fi
+}
 
 alias wp="kubectl get po --watch | grep $1"
 
 alias ep="kubectl exec -it $1 /bin/sh"
-alias gwr="git ls-files | xargs sed -i 's/[[:space:]]\+$//'"
-alias t2s="for i in $(git ls-files | grep "tf$\|hcl$"); do sed -i 's/\t/  /g' $i; done"
+alias gwr="for i in \$(git ls-files | grep \"tf$\|hcl$\|py$\|json$\|groovy$\|ts$\"); do sed -i 's/[[:space:]]\+$//' \$i; done"
+alias t2s="for i in \$(git ls-files | grep \"tf$\|hcl$\"); do sed -i 's/\\t/  /g' \$i; done"
+alias gba="git log | grep Author | sort | uniq -c"
 
 # function fixb() {
 #   gwr
@@ -145,7 +158,11 @@ alias t2s="for i in $(git ls-files | grep "tf$\|hcl$"); do sed -i 's/\t/  /g' $i
 #   gco fix removing trailing spaces
 #   t2s
 #   gaa
-#   fco fix converting tabs to spaces
+#   gco fix converting tabs to spaces
+#   terraform fmt --recursive
+#   terragrunt hclfmt --recursive
+#   gaa
+#   gco fix aligning terragrunt and teraform files
 # }
 
 function awsp() {
@@ -220,12 +237,27 @@ function s53() {
 
 function r53() {
 for i in $(l53 | cut -f1)
-	do echo "Hosted Zone: $(aws route53 get-hosted-zone --id $i --query 'HostedZone.[Id,Name]' --output text | sed 's_.*/__g')"
-#	aws route53 list-resource-record-sets --hosted-zone-id $i --query 'ResourceRecordSets[*].[Type,AliasTarget.DNSName]' --output text | grep -v "NS\|SOA"
+  do echo "Hosted Zone: $(aws route53 get-hosted-zone --id $i --query 'HostedZone.[Id,Name]' --output text | sed 's_.*/__g')"
+#  aws route53 list-resource-record-sets --hosted-zone-id $i --query 'ResourceRecordSets[*].[Type,AliasTarget.DNSName]' --output text | grep -v "NS\|SOA"
   s53 $i
 done | grep "Hosted Zone\|$1" | grep -B1 "$1"
 }
 
+function gc() {
+  #meant for gopro mp4 footage, this should shrink it to a smaller size
+  mkdir converted
+  for i in $(ls *.MP4); do NAME=$(echo $i | cut -d '.' -f1); ffmpeg -i $i -vcodec libx265 -crf 28 converted/$NAME-converted.mp4; done
+}
+
+function aaws() {
+  local COMMAND="$1"
+  echo $COMMAND
+  for i in $(grep "\[" $HOME/.aws/credentials | sed 's/\[//g;s/\]//g' | grep -v 'assume-')
+    do echo "account $i"
+    awsp $i
+    $COMMAND
+  done
+}
 
 #neovim magics
 # now you can copy to clipboard with '+y'
@@ -234,3 +266,131 @@ source <(kubectl completion bash)
 complete -C aws_completer aws
 
 alias synctime="sudo apt install ntpdate && sudo ntpdate pool.ntp.org"
+alias editgeneral="code /hdd/git/general/ -r"
+
+function seesize() {
+  df -h "$@"
+}
+
+function seesizes() {
+  du -sh "$1"* | sort -rh
+}
+
+function cleantgcache() {
+  find /hdd/git/live-projects -type d -name ".terra*" -exec rm -rf {} +
+}
+
+create_pr() {
+    # Check if the current directory is a git repository
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        echo "This is not a git repository."
+        return 1
+    fi
+
+    # Extract the repository name from the current directory
+    local REPO_NAME=$(basename "$(pwd)")
+    echo "Repository Name: $REPO_NAME"
+
+    # Define the path to the PR template
+    local PR_TEMPLATE_PATH=".azuredevops/pull_request_template.md"
+
+    # Check if the PR template exists
+    if [ ! -f "$PR_TEMPLATE_PATH" ]; then
+        echo "PR template file not found."
+        return 1
+    fi
+
+    # Read the PR description from the template
+    local PR_DESCRIPTION=$(cat "$PR_TEMPLATE_PATH")
+    echo "PR Description: $PR_DESCRIPTION"
+
+    # Define the branch name
+    local BRANCH_NAME=$(git branch --show-current)
+    echo "Current Branch: $BRANCH_NAME"
+
+    # Use the first argument as the ticket ID if provided, otherwise default to the branch name
+    local TICKET_ID=${1:-$BRANCH_NAME}
+    echo "Ticket ID: $TICKET_ID"
+
+    # Get the last commit message
+    local LAST_COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+    echo "Last Commit Message: $LAST_COMMIT_MESSAGE"
+
+    # Construct the PR title using the last commit message
+    local PR_TITLE="$LAST_COMMIT_MESSAGE"
+    echo "PR Title: $PR_TITLE"
+
+    # Check if the master branch exists, if not, use main
+    local TARGET_BRANCH
+    if git show-ref --verify --quiet refs/heads/master; then
+        TARGET_BRANCH="master"
+    elif git show-ref --verify --quiet refs/heads/main; then
+        TARGET_BRANCH="main"
+    else
+        echo "Neither master nor main branch found in the repository."
+        return 1
+    fi
+    echo "Target Branch: $TARGET_BRANCH"
+
+    # Ensure branch is pushed to remote
+    echo "Pushing branch $BRANCH_NAME to remote"
+    git push origin "$BRANCH_NAME"
+
+    # Create the pull request
+    echo "Creating pull request..."
+    az repos pr create --auto-complete false --repository "$REPO_NAME" --source-branch "$BRANCH_NAME" --target-branch "$TARGET_BRANCH" --description "$PR_DESCRIPTION" --title "$PR_TITLE" --work-items "$TICKET_ID"
+
+    # Capture PR output and check if the PR creation was successful
+    local PR_OUTPUT=$(az repos pr create --auto-complete false --repository "$REPO_NAME" --source-branch "$BRANCH_NAME" --target-branch "$TARGET_BRANCH" --description "$PR_DESCRIPTION" --title "$PR_TITLE" --work-items "$TICKET_ID")
+    
+    if [ $? -eq 0 ]; then
+        # Extract the PR URL from the output
+        local PR_URL=$(echo "$PR_OUTPUT" | jq -r '.repository.webUrl + "/pullrequest/" + (.pullRequestId | tostring)')
+        echo "Pull Request created: $PR_URL"
+    else
+        echo "Failed to create Pull Request"
+        return 1
+    fi
+}
+
+# Export the function if needed
+export -f create_pr
+
+alias updateall="sudo apt update && sudo apt upgrade -y && sudo apt full-upgrade -y && sudo snap refresh"
+
+tgperm() {
+    echo "Running Terragrunt Plan..."
+    terragrunt plan
+
+    echo "Applying Changes with Terragrunt..."
+    TF_LOG=trace terragrunt apply &> log.log
+
+    echo "Extracting AWS Permissions..."
+    # Extract lines with both rpc.method and rpc.service, and with only rpc.method
+    cat log.log | grep -o "rpc.method=[^ ]* \(rpc.service=[^ ]*\)\?" | sort | uniq > all_permissions.txt
+
+    # Process the lines to format and remove duplicates
+    awk -F" " '{
+        method = gensub("rpc.method=", "", "g", $1);
+        service = gensub("rpc.service=", "", "g", $2);
+        if (service != "") {
+            combined[method] = method " " service;
+        } else if (!(method in combined)) {
+            combined[method] = method;
+        }
+    }
+    END {
+        for (entry in combined) {
+            print combined[entry];
+        }
+    }' all_permissions.txt > extracted_permissions.txt
+
+    echo "Permissions extracted to extracted_permissions.txt"
+
+    echo "Cleaning up log files..."
+    rm -f all_permissions.txt
+    # rm -f log.log all_permissions.txt
+
+    echo "Operation completed successfully."
+}
+
