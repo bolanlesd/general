@@ -1,9 +1,3 @@
-if [ -n "$ZSH_VERSION" ]; then
-  export SHELL_TYPE="zsh"
-else
-  export SHELL_TYPE="bash"
-fi
-
 export VISUAL=vim
 export EDITOR="$VISUAL"
 
@@ -268,8 +262,8 @@ function aaws() {
 #neovim magics
 # now you can copy to clipboard with '+y'
 #set clipboard+=unnamedplus
-#source <(kubectl completion bash)
-#complete -C aws_completer aws
+source <(kubectl completion bash)
+complete -C aws_completer aws
 
 alias synctime="sudo apt install ntpdate && sudo ntpdate pool.ntp.org"
 alias editgeneral="code /hdd/git/general/ -r"
