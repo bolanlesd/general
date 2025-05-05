@@ -52,7 +52,7 @@ function gco() {
 }
 
 alias tf="terraform"
-alias tg="terragrunt --terragrunt-forward-tf-stdout "
+alias tg="terragrunt run --tf-forward-stdout"
 alias tgp="tg plan"
 tgpt() {
     terragrunt plan -target="$1"
@@ -540,3 +540,26 @@ alias ecr-retag-image='f() {
         return 1
     fi
 }; f'
+
+function tp_start() {
+  local app=$1
+
+  # Check if app variable is empty
+  if [ -z "$app" ]; then
+    echo "Error: No environment specified. Please provide the application name."
+    return 1
+  fi
+
+  # Run the sequence of commands
+  echo "Logging out of current session..."
+  tsh apps logout
+
+  echo "Logging in with Azure AD..."
+  tsh login --proxy=youlend.teleport.sh:443 --auth=ad
+
+  echo "Logging into AWS app '$app'..."
+  tsh apps login "$app" --aws-role sudo_admin
+
+  echo "Starting AWS proxy for '$app'..."
+  tsh proxy aws --app "$app"
+}
