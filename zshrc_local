@@ -1,0 +1,37 @@
+##### paste this into your ~/.zshrc file #####
+# 1. Set common environment variables
+export VISUAL=vim
+export EDITOR="$VISUAL"
+
+# 2. Source remote bash-style config (compatible with zsh)
+if [ -f ~/local_copy_zshrc ]; then
+    curl -z ~/local_copy_zshrc -o ~/local_copy_zshrc https://raw.githubusercontent.com/bolanlesd/general/master-mac/zshrc
+else
+  curl -o ~/local_copy_zshrc https://raw.githubusercontent.com/bolanlesd/general/master-mac/zshrc
+fi
+source ~/local_copy_zshrc
+
+# 3. Show time, path, and Git branch — like Bash style
+function git_branch_prompt {
+  ref=$(git symbolic-ref HEAD 2> /dev/null) || return
+  echo " (${ref#refs/heads/})"
+}
+
+if [[ -n "$ZSH_VERSION" ]]; then
+  autoload -Uz vcs_info
+  add-zsh-hook precmd vcs_info
+  setopt prompt_subst
+  PROMPT='%F{yellow}%* %f%~ %F{green}${vcs_info_msg_0_}%f $ '
+fi
+
+function update_git_prompt {
+  export GIT_BRANCH=$(git_branch_prompt)
+}
+
+setopt PROMPT_SUBST
+PROMPT='%F{yellow}%* %f%~%F{green}$GIT_BRANCH%f $ '
+
+# 4. Set path for brew (M1/M2/M3 chip)
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+echo "✅ Loaded custom .zshrc"
