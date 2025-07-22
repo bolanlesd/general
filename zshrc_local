@@ -1,0 +1,32 @@
+# --- 1. Environment ---
+export VISUAL=vim
+export EDITOR="$VISUAL"
+
+# --- 2. Load remote-compatible zshrc ---
+if [ -f ~/local_copy_zshrc ]; then
+  curl -z ~/local_copy_zshrc -o ~/local_copy_zshrc https://raw.githubusercontent.com/bolanlesd/general/master-mac/zshrc
+else
+  curl -o ~/local_copy_zshrc https://raw.githubusercontent.com/bolanlesd/general/master-mac/zshrc
+fi
+source ~/local_copy_zshrc
+
+# --- 3. Git branch prompt using vcs_info ---
+autoload -Uz vcs_info
+zstyle ':vcs_info:*' enable git
+zstyle ':vcs_info:git:*' formats '(%b)'
+add-zsh-hook precmd vcs_info
+
+setopt prompt_subst
+PROMPT='%F{yellow}%* %F{blue}%~ %F{green}${vcs_info_msg_0_}%f $ '
+
+# --- 4. Homebrew path ---
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+# --- 5. Completions (only once) ---
+autoload -Uz compinit
+compinit
+
+# --- 6. (Optional) Only if needed here, otherwise it’s already in ~/local_copy_zshrc ---
+# source /opt/homebrew/share/th/th.sh
+
+echo "✅ Loaded custom .zshrc"
