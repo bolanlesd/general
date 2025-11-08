@@ -1,0 +1,34 @@
+# --- 1. Environment ---
+export VISUAL=vim
+export EDITOR="$VISUAL"
+
+# --- 1.5 Keyboard Behavior Fix ---
+bindkey -e  # Use Emacs mode for normal typing and Option + Arrow navigation
+
+# --- 2. Load remote-compatible zshrc ---
+REMOTE_ZSHRC=~/local_copy_zshrc
+REMOTE_URL="https://raw.githubusercontent.com/bolanlesd/general/my-mac/zshrc"
+
+curl --silent --fail --output "$REMOTE_ZSHRC" "$REMOTE_URL" \
+  && echo "✅ Downloaded latest zshrc from GitHub" \
+  || echo "❌ Failed to download remote zshrc!"
+
+source "$REMOTE_ZSHRC"
+
+# --- 3. Git branch prompt using vcs_info ---
+autoload -Uz vcs_info
+zstyle ':vcs_info:*' enable git
+zstyle ':vcs_info:git:*' formats '(%b)'
+add-zsh-hook precmd vcs_info
+
+setopt prompt_subst
+PROMPT='%F{yellow}%* %F{blue}%~ %F{green}${vcs_info_msg_0_}%f $ '
+
+# --- 4. Homebrew path ---
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+# --- 5. Completions (only once) ---
+autoload -Uz compinit
+compinit
+
+echo "✅ Loaded custom .zshrc"
