@@ -9,9 +9,7 @@ bindkey -e  # Use Emacs mode for normal typing and Option + Arrow navigation
 REMOTE_ZSHRC=~/local_copy_zshrc
 REMOTE_URL="https://raw.githubusercontent.com/bolanlesd/general/master-mac/zshrc"
 
-unset HTTPS_PROXY
-
-curl --silent --fail --output "$REMOTE_ZSHRC" "$REMOTE_URL" \
+curl --noproxy '*' --silent --fail --output "$REMOTE_ZSHRC" "$REMOTE_URL" \
   && echo "✅ Downloaded latest zshrc from GitHub" \
   || echo "❌ Failed to download remote zshrc!"
 
