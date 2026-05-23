@@ -242,3 +242,6 @@ function cleanup_venv() {
   rm -rf myenv
   echo "✅ Process completed."
 }
+
+# --- th helper overrides (kept under version control) ---
+[ -f ~/git/general/th-overrides.sh ] && source ~/git/general/th-overrides.sh
