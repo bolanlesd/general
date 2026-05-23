@@ -110,7 +110,7 @@ function cleantgcache() {
 }
 
 # --- Create PR (Azure DevOps) ---
-# Usage: create_pr [TICKET_ID] [TARGET_BRANCH]
+# Usage: create_pr [TICKET_ID] [TARGET_BRANCH] [--dry-run] [--draft]
 #   - Works from any directory inside a git repo (resolves repo root automatically).
 #   - Auto-runs `az login --allow-no-subscription` if not already authenticated.
 #   - Auto-fills the .azuredevops/pull_request_template.md based on the branch diff:
@@ -118,6 +118,8 @@ function cleantgcache() {
 #       * Description seeded from commits between target..HEAD
 #       * terraform_remote_state / checkov-ignore checkboxes toggled based on diff
 #       * "How has this been Tested?" pre-populated with the list of envs touched
+#   - --dry-run : print the would-be PR title/branch/description and stop (no submission)
+#   - --draft   : create the PR as a draft
 function create_pr() {
   if ! command -v az &>/dev/null || ! command -v jq &>/dev/null; then
     echo "Required command(s) 'az' or 'jq' not found." >&2
@@ -128,6 +130,22 @@ function create_pr() {
     echo "Not a git repository." >&2
     return 1
   fi
+
+  # --- arg parsing: split flags vs positional ---
+  local DRY_RUN=0 DRAFT=0
+  local -a POSITIONAL
+  POSITIONAL=()
+  while (( $# )); do
+    case "$1" in
+      -n|--dry-run) DRY_RUN=1 ;;
+      -d|--draft)   DRAFT=1 ;;
+      -h|--help)
+        echo "Usage: create_pr [TICKET_ID] [TARGET_BRANCH] [--dry-run] [--draft]"
+        return 0 ;;
+      *) POSITIONAL+=("$1") ;;
+    esac
+    shift
+  done
 
   # --- ensure we operate from the repo root regardless of caller's cwd ---
   local REPO_ROOT
@@ -145,8 +163,13 @@ function create_pr() {
   local REPO_NAME BRANCH_NAME TICKET_ID TARGET_BRANCH LAST_COMMIT_MESSAGE PR_TITLE PR_DESCRIPTION TEMPLATE_PATH
   REPO_NAME=$(basename "$REPO_ROOT")
   BRANCH_NAME=$(git -C "$REPO_ROOT" branch --show-current)
-  TICKET_ID=${1:-$BRANCH_NAME}
-  TARGET_BRANCH=${2:-master}
+  TICKET_ID=${POSITIONAL[1]:-${POSITIONAL[0]:-$BRANCH_NAME}}
+  TARGET_BRANCH=${POSITIONAL[2]:-${POSITIONAL[1]:-master}}
+  # Note: in zsh arrays are 1-indexed; in bash they're 0-indexed. Re-resolve safely:
+  if [ -n "${POSITIONAL[0]}" ]; then TICKET_ID="${POSITIONAL[0]}"; fi
+  if [ -n "${POSITIONAL[1]}" ]; then TARGET_BRANCH="${POSITIONAL[1]}"; fi
+  [ -z "$TICKET_ID" ]    && TICKET_ID="$BRANCH_NAME"
+  [ -z "$TARGET_BRANCH" ] && TARGET_BRANCH="master"
   LAST_COMMIT_MESSAGE=$(git -C "$REPO_ROOT" log -1 --pretty=%B)
   PR_TITLE="$LAST_COMMIT_MESSAGE"
 
@@ -167,8 +190,10 @@ function create_pr() {
   COMMIT_LOG=$(git -C "$REPO_ROOT" log --pretty='- %s' "${DIFF_RANGE}" 2>/dev/null | head -20)
   [ -z "$COMMIT_LOG" ] && COMMIT_LOG="- ${LAST_COMMIT_MESSAGE}"
 
+  # Only list paths that are inside a leaf env dir (envs/<stage>/<name>/<file>),
+  # avoids false positives like envs/dev/env.hcl appearing as "dev/env.hcl".
   ENV_LIST=$(git -C "$REPO_ROOT" diff --name-only "${DIFF_RANGE}" 2>/dev/null \
-    | awk -F/ '/^envs\// {print $2"/"$3}' | sort -u | sed 's/^/  - /')
+    | awk -F/ 'NF>=4 && $1=="envs" {print $2"/"$3}' | sort -u | sed 's/^/  - /')
 
   HAS_REMOTE_STATE=$(git -C "$REPO_ROOT" diff "${DIFF_RANGE}" -- '*.tf' '*.hcl' 2>/dev/null \
     | grep -E '^\+.*terraform_remote_state' | head -1)
@@ -224,12 +249,23 @@ function create_pr() {
   echo "🌿 Source branch:  $BRANCH_NAME  ->  $TARGET_BRANCH"
   echo "🎫 Work item:      $TICKET_ID"
   echo "📦 Repo:           $REPO_NAME ($REPO_ROOT)"
+  [ "$DRAFT" = "1" ]   && echo "📄 Mode:           DRAFT"
+  [ "$DRY_RUN" = "1" ] && echo "🧪 Mode:           DRY-RUN (no submission)"
   echo "─── Description preview ───"
   printf '%s\n' "$PR_DESCRIPTION" | sed 's/^/  /' | head -40
   echo "───────────────────────────"
 
+  if [ "$DRY_RUN" = "1" ]; then
+    echo "🛑 Dry-run complete — PR not submitted."
+    return 0
+  fi
+
   local TMP_OUTPUT
   TMP_OUTPUT=$(mktemp)
+
+  local -a AZ_EXTRA_ARGS
+  AZ_EXTRA_ARGS=()
+  [ "$DRAFT" = "1" ] && AZ_EXTRA_ARGS+=(--draft true)
 
   if ! (cd "$REPO_ROOT" && az repos pr create \
     --auto-complete false \
@@ -239,6 +275,7 @@ function create_pr() {
     --description "$PR_DESCRIPTION" \
     --title "$PR_TITLE" \
     --work-items "$TICKET_ID" \
+    "${AZ_EXTRA_ARGS[@]}" \
     --output json) >"$TMP_OUTPUT" 2>/dev/null; then
     echo "❌ Failed to create Pull Request"
     cat "$TMP_OUTPUT"
