@@ -178,31 +178,46 @@ function create_pr() {
   # ticket id placeholder
   PR_DESCRIPTION=${PR_DESCRIPTION//\#ticket_id_here/#${TICKET_ID}}
 
-  # description body (insert after "# Description" header, before the <!-- comment -->)
-  PR_DESCRIPTION=$(printf '%s' "$PR_DESCRIPTION" | awk -v body="$COMMIT_LOG" '
-    BEGIN{done=0}
-    /^# Description/ && !done {print; print ""; print body; print ""; done=1; next}
-    {print}
-  ')
+  # write to tmp file so we can use file-based substitution (awk -v breaks on newlines)
+  local TMP_DESC TMP_BODY TMP_ENVS
+  TMP_DESC=$(mktemp); TMP_BODY=$(mktemp); TMP_ENVS=$(mktemp)
+  printf '%s\n' "$PR_DESCRIPTION" >"$TMP_DESC"
+  printf '%s\n' "$COMMIT_LOG"     >"$TMP_BODY"
+  printf '%s\n' "$ENV_LIST"       >"$TMP_ENVS"
+
+  # description body — insert after "# Description" header
+  awk -v bodyfile="$TMP_BODY" '
+    BEGIN{ while ((getline line < bodyfile) > 0) body = body line "\n"; done=0 }
+    /^# Description/ && !done { print; print ""; printf "%s", body; done=1; next }
+    { print }
+  ' "$TMP_DESC" >"${TMP_DESC}.new" && mv "${TMP_DESC}.new" "$TMP_DESC"
 
   # toggle terraform_remote_state checkbox
   if [ -n "$HAS_REMOTE_STATE" ]; then
-    PR_DESCRIPTION=${PR_DESCRIPTION//- \[x\] I have not added any terraform_remote_state code to the repo/- [ ] I have not added any terraform_remote_state code to the repo}
+    sed -i.bak 's/^- \[x\] I have not added any terraform_remote_state/- [ ] I have not added any terraform_remote_state/' "$TMP_DESC" && rm -f "${TMP_DESC}.bak"
   fi
 
   # toggle checkov-ignore checkbox
   if [ -n "$HAS_CHECKOV_IGNORE" ]; then
-    PR_DESCRIPTION=${PR_DESCRIPTION//- \[x\] \*\*Code Changes do not include checkov ignores.\*\*/- [ ] **Code Changes do not include checkov ignores.**}
+    sed -i.bak 's/^- \[x\] \*\*Code Changes do not include checkov ignores/- [ ] **Code Changes do not include checkov ignores/' "$TMP_DESC" && rm -f "${TMP_DESC}.bak"
   fi
 
   # populate "How has this been Tested?" with envs touched
   if [ -n "$ENV_LIST" ]; then
-    PR_DESCRIPTION=$(printf '%s' "$PR_DESCRIPTION" | awk -v envs="$ENV_LIST" '
-      BEGIN{done=0}
-      /^## How has this been Tested\?/ && !done {print; getline; print; print ""; print "Planned cleanly in the following envs:"; print envs; done=1; next}
-      {print}
-    ')
+    awk -v envfile="$TMP_ENVS" '
+      BEGIN{ while ((getline line < envfile) > 0) envs = envs line "\n"; done=0 }
+      /^## How has this been Tested\?/ && !done {
+        print; if ((getline nxt) > 0) print nxt
+        print ""; print "Planned cleanly in the following envs:"
+        printf "%s", envs
+        done=1; next
+      }
+      { print }
+    ' "$TMP_DESC" >"${TMP_DESC}.new" && mv "${TMP_DESC}.new" "$TMP_DESC"
   fi
+
+  PR_DESCRIPTION=$(cat "$TMP_DESC")
+  rm -f "$TMP_DESC" "$TMP_BODY" "$TMP_ENVS"
 
   # show summary for visibility
   echo "📝 PR title:       $PR_TITLE"
