@@ -110,6 +110,14 @@ function cleantgcache() {
 }
 
 # --- Create PR (Azure DevOps) ---
+# Usage: create_pr [TICKET_ID] [TARGET_BRANCH]
+#   - Works from any directory inside a git repo (resolves repo root automatically).
+#   - Auto-runs `az login --allow-no-subscription` if not already authenticated.
+#   - Auto-fills the .azuredevops/pull_request_template.md based on the branch diff:
+#       * Ticket ID placeholder replaced with branch / arg
+#       * Description seeded from commits between target..HEAD
+#       * terraform_remote_state / checkov-ignore checkboxes toggled based on diff
+#       * "How has this been Tested?" pre-populated with the list of envs touched
 function create_pr() {
   if ! command -v az &>/dev/null || ! command -v jq &>/dev/null; then
     echo "Required command(s) 'az' or 'jq' not found." >&2
@@ -121,37 +129,110 @@ function create_pr() {
     return 1
   fi
 
-  local REPO_NAME BRANCH_NAME TICKET_ID LAST_COMMIT_MESSAGE PR_TITLE PR_DESCRIPTION PR_OUTPUT
+  # --- ensure we operate from the repo root regardless of caller's cwd ---
+  local REPO_ROOT
+  REPO_ROOT=$(git rev-parse --show-toplevel) || return 1
 
-  REPO_NAME=$(basename "$(pwd)")
-  BRANCH_NAME=$(git branch --show-current)
+  # --- ensure az is logged in (silent re-login if needed) ---
+  if ! az account show &>/dev/null; then
+    echo "🔐 az not logged in — running 'az login --allow-no-subscription'..."
+    if ! az login --allow-no-subscription >/dev/null; then
+      echo "❌ az login failed" >&2
+      return 1
+    fi
+  fi
+
+  local REPO_NAME BRANCH_NAME TICKET_ID TARGET_BRANCH LAST_COMMIT_MESSAGE PR_TITLE PR_DESCRIPTION TEMPLATE_PATH
+  REPO_NAME=$(basename "$REPO_ROOT")
+  BRANCH_NAME=$(git -C "$REPO_ROOT" branch --show-current)
   TICKET_ID=${1:-$BRANCH_NAME}
-  LAST_COMMIT_MESSAGE=$(git log -1 --pretty=%B)
-  PR_DESCRIPTION=$(cat .azuredevops/pull_request_template.md)
+  TARGET_BRANCH=${2:-master}
+  LAST_COMMIT_MESSAGE=$(git -C "$REPO_ROOT" log -1 --pretty=%B)
   PR_TITLE="$LAST_COMMIT_MESSAGE"
 
-  # Use a temp file to safely capture output
+  TEMPLATE_PATH="$REPO_ROOT/.azuredevops/pull_request_template.md"
+  if [ ! -f "$TEMPLATE_PATH" ]; then
+    echo "❌ PR template not found at $TEMPLATE_PATH" >&2
+    return 1
+  fi
+  PR_DESCRIPTION=$(cat "$TEMPLATE_PATH")
+
+  # --- auto-fill template fields based on the actual diff ---
+  local DIFF_RANGE COMMIT_LOG ENV_LIST HAS_REMOTE_STATE HAS_CHECKOV_IGNORE
+  DIFF_RANGE="origin/${TARGET_BRANCH}...HEAD"
+  if ! git -C "$REPO_ROOT" rev-parse --verify -q "origin/${TARGET_BRANCH}" >/dev/null; then
+    DIFF_RANGE="${TARGET_BRANCH}...HEAD"
+  fi
+
+  COMMIT_LOG=$(git -C "$REPO_ROOT" log --pretty='- %s' "${DIFF_RANGE}" 2>/dev/null | head -20)
+  [ -z "$COMMIT_LOG" ] && COMMIT_LOG="- ${LAST_COMMIT_MESSAGE}"
+
+  ENV_LIST=$(git -C "$REPO_ROOT" diff --name-only "${DIFF_RANGE}" 2>/dev/null \
+    | awk -F/ '/^envs\// {print $2"/"$3}' | sort -u | sed 's/^/  - /')
+
+  HAS_REMOTE_STATE=$(git -C "$REPO_ROOT" diff "${DIFF_RANGE}" -- '*.tf' '*.hcl' 2>/dev/null \
+    | grep -E '^\+.*terraform_remote_state' | head -1)
+  HAS_CHECKOV_IGNORE=$(git -C "$REPO_ROOT" diff "${DIFF_RANGE}" -- '*.tf' '*.hcl' '*.yml' '*.yaml' 2>/dev/null \
+    | grep -Ei '^\+.*checkov:skip|^\+.*skip-check' | head -1)
+
+  # ticket id placeholder
+  PR_DESCRIPTION=${PR_DESCRIPTION//\#ticket_id_here/#${TICKET_ID}}
+
+  # description body (insert after "# Description" header, before the <!-- comment -->)
+  PR_DESCRIPTION=$(printf '%s' "$PR_DESCRIPTION" | awk -v body="$COMMIT_LOG" '
+    BEGIN{done=0}
+    /^# Description/ && !done {print; print ""; print body; print ""; done=1; next}
+    {print}
+  ')
+
+  # toggle terraform_remote_state checkbox
+  if [ -n "$HAS_REMOTE_STATE" ]; then
+    PR_DESCRIPTION=${PR_DESCRIPTION//- \[x\] I have not added any terraform_remote_state code to the repo/- [ ] I have not added any terraform_remote_state code to the repo}
+  fi
+
+  # toggle checkov-ignore checkbox
+  if [ -n "$HAS_CHECKOV_IGNORE" ]; then
+    PR_DESCRIPTION=${PR_DESCRIPTION//- \[x\] \*\*Code Changes do not include checkov ignores.\*\*/- [ ] **Code Changes do not include checkov ignores.**}
+  fi
+
+  # populate "How has this been Tested?" with envs touched
+  if [ -n "$ENV_LIST" ]; then
+    PR_DESCRIPTION=$(printf '%s' "$PR_DESCRIPTION" | awk -v envs="$ENV_LIST" '
+      BEGIN{done=0}
+      /^## How has this been Tested\?/ && !done {print; getline; print; print ""; print "Planned cleanly in the following envs:"; print envs; done=1; next}
+      {print}
+    ')
+  fi
+
+  # show summary for visibility
+  echo "📝 PR title:       $PR_TITLE"
+  echo "🌿 Source branch:  $BRANCH_NAME  ->  $TARGET_BRANCH"
+  echo "🎫 Work item:      $TICKET_ID"
+  echo "📦 Repo:           $REPO_NAME ($REPO_ROOT)"
+  echo "─── Description preview ───"
+  printf '%s\n' "$PR_DESCRIPTION" | sed 's/^/  /' | head -40
+  echo "───────────────────────────"
+
   local TMP_OUTPUT
   TMP_OUTPUT=$(mktemp)
 
-  if ! az repos pr create \
+  if ! (cd "$REPO_ROOT" && az repos pr create \
     --auto-complete false \
     --repository "$REPO_NAME" \
     --source-branch "$BRANCH_NAME" \
-    --target-branch master \
+    --target-branch "$TARGET_BRANCH" \
     --description "$PR_DESCRIPTION" \
     --title "$PR_TITLE" \
     --work-items "$TICKET_ID" \
-    --output json >"$TMP_OUTPUT" 2>/dev/null; then
+    --output json) >"$TMP_OUTPUT" 2>/dev/null; then
     echo "❌ Failed to create Pull Request"
     cat "$TMP_OUTPUT"
     rm -f "$TMP_OUTPUT"
     return 1
   fi
 
-  # Try to extract URL
   if jq -e .url "$TMP_OUTPUT" &>/dev/null; then
-    jq -r '"\(.repository.webUrl)/pullrequest/\(.pullRequestId)"' "$TMP_OUTPUT"
+    jq -r '"✅ \(.repository.webUrl)/pullrequest/\(.pullRequestId)"' "$TMP_OUTPUT"
   else
     echo "❌ Failed to parse PR output"
     cat "$TMP_OUTPUT"
