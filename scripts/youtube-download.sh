@@ -1,26 +1,26 @@
 #!/bin/bash
 # YouTube Audio Downloader
-# Downloads audio from YouTube using yt-dlp and converts to MP3
-# Usage: youtube-download "https://www.youtube.com/watch?v=VIDEO_ID" [format] [quality]
+# Downloads audio from YouTube using yt-dlp and converts to WAV
+# Usage: yt-dl "https://www.youtube.com/watch?v=VIDEO_ID" [format] [quality]
 
 set -e
 
 if [ $# -eq 0 ]; then
-    echo "Usage: youtube-download <URL> [audio-format] [quality]"
+    echo "Usage: yt-dl <URL> [audio-format] [quality]"
     echo ""
     echo "Examples:"
-    echo "  youtube-download \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\""
-    echo "  youtube-download \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\" mp3"
-    echo "  youtube-download \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\" mp3 192"
+    echo "  yt-dl \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\""
+    echo "  yt-dl \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\" mp3"
+    echo "  yt-dl \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\" wav 192"
     echo ""
     echo "Supported audio formats: mp3, m4a, opus, vorbis, wav"
-    echo "Default format: mp3"
+    echo "Default format: wav"
     echo "Default quality: best"
     exit 1
 fi
 
 URL="$1"
-FORMAT="${2:-mp3}"
+FORMAT="${2:-wav}"
 QUALITY="${3:-best}"
 
 # Validate URL
