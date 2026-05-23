@@ -139,8 +139,46 @@ function create_pr() {
     case "$1" in
       -n|--dry-run) DRY_RUN=1 ;;
       -d|--draft)   DRAFT=1 ;;
-      -h|--help)
-        echo "Usage: create_pr [TICKET_ID] [TARGET_BRANCH] [--dry-run] [--draft]"
+      -h|--help|--explain)
+        cat <<'EOF'
+create_pr — open an Azure DevOps PR with an auto-filled template.
+
+USAGE
+  create_pr [TICKET_ID] [TARGET_BRANCH] [--dry-run] [--draft]
+
+ARGUMENTS
+  TICKET_ID       Work item to link. Defaults to current branch name.
+  TARGET_BRANCH   PR target. Defaults to "master".
+
+FLAGS
+  -n, --dry-run   Build & preview the PR but do NOT submit it.
+  -d, --draft     Submit the PR as a draft.
+  -h, --help      Show this help and exit.
+
+WHAT IT DOES
+  1. Runs from anywhere inside the repo (resolves repo root via git).
+  2. Auto-runs `az login --allow-no-subscription` if you are not signed in.
+  3. Reads .azuredevops/pull_request_template.md and auto-fills:
+       • Ticket ID placeholder
+       • Description seeded from `git log origin/<target>..HEAD`
+       • Unticks "no terraform_remote_state added" if the diff adds one
+       • Unticks "no checkov ignores added"        if the diff adds one
+       • Pre-populates "How has this been Tested?" with the list of envs
+         touched (envs/<stage>/<name>/ paths in the diff)
+  4. Builds the title as "[TICKET] <last commit message>".
+  5. Prints a preview (title, branches, work item, repo, first 40 lines of
+     the description), then either:
+       • stops (when --dry-run), or
+       • submits via `az repos pr create` (adding `--draft true` if --draft).
+  6. Prints the final PR URL on success.
+
+EXAMPLES
+  create_pr                           # ticket = branch, target = master
+  create_pr 63699                     # explicit ticket
+  create_pr 63699 develop             # explicit ticket + target
+  create_pr --dry-run                 # preview only
+  create_pr 63699 master --draft      # open as a draft PR
+EOF
         return 0 ;;
       *) POSITIONAL+=("$1") ;;
     esac
