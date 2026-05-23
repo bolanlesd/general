@@ -30,7 +30,7 @@ if [[ ! "$URL" =~ youtube.com|youtu.be ]]; then
 fi
 
 # Set output directory
-OUTPUT_DIR="$HOME/Downloads"
+OUTPUT_DIR="$HOME/Documents/SJC_Songs"
 mkdir -p "$OUTPUT_DIR"
 
 echo "📥 Downloading audio from YouTube..."
