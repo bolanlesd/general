@@ -6,13 +6,14 @@ export EDITOR="$VISUAL"
 bindkey -e  # Use Emacs mode for normal typing and Option + Arrow navigation
 
 # --- 2. Load main zshrc (prefer local clone, fall back to GitHub) ---
-LOCAL_ZSHRC="$HOME/git/playground/general/shell/zshrc"
-REMOTE_ZSHRC="$HOME/local_copy_zshrc"
+LOCAL_ZSHRC=~/git/general/shell/zshrc
+REMOTE_ZSHRC=~/local_copy_zshrc
 REMOTE_URL="https://raw.githubusercontent.com/bolanlesd/general/my-mac/shell/zshrc"
 
 if [[ -f "$LOCAL_ZSHRC" ]]; then
   source "$LOCAL_ZSHRC"
 else
+  echo "ℹ️  $LOCAL_ZSHRC not found, falling back to GitHub..."
   curl --silent --fail --output "$REMOTE_ZSHRC" "$REMOTE_URL" \
     && echo "✅ Downloaded latest zshrc from GitHub" \
     || echo "❌ Failed to download remote zshrc!"

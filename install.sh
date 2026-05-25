@@ -37,3 +37,4 @@ else
 fi
 
 echo "Done. Open a new shell or run: source ~/.zshrc"
+

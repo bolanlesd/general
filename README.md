@@ -19,15 +19,15 @@ Shell config, dotfiles, scripts, infra snippets, and notes I use across machines
 ## Setup on a new machine
 
 ```sh
-git clone https://github.com/bolanlesd/general.git ~/git/playground/general
-cd ~/git/playground/general
+git clone https://github.com/bolanlesd/general.git ~/git/general
+cd ~/git/general
 ./install.sh
 exec zsh
 ```
 
 `install.sh` will:
 1. Symlink `dotfiles/vimrc` → `~/.vimrc` and `dotfiles/tmux.conf` → `~/.tmux.conf` (backing up existing files).
-2. Install [shell/zshrc.local.template](shell/zshrc.local.template) as `~/.zshrc` if not already present. On machines with the repo cloned at `~/git/playground/general` it sources [shell/zshrc](shell/zshrc) directly; otherwise it downloads it from the `my-mac` branch on GitHub.
+2. Install [shell/zshrc.local.template](shell/zshrc.local.template) as `~/.zshrc` if not already present. On machines with the repo cloned at `~/git/general` it sources [shell/zshrc](shell/zshrc) directly; otherwise it downloads it from the `my-mac` branch on GitHub.
 
 ## Updating
 
