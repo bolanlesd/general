@@ -8,13 +8,14 @@ bindkey -e  # Use Emacs mode for normal typing and Option + Arrow navigation
 # --- 2. Load main zshrc (prefer local clone, fall back to GitHub) ---
 LOCAL_ZSHRC=~/git/general/shell/zshrc
 REMOTE_ZSHRC=~/local_copy_zshrc
-REMOTE_URL="https://raw.githubusercontent.com/bolanlesd/general/my-mac/shell/zshrc"
+REMOTE_URL="https://raw.githubusercontent.com/bolanlesd/general/master-mac/shell/zshrc"
 
 if [[ -f "$LOCAL_ZSHRC" ]]; then
   source "$LOCAL_ZSHRC"
 else
   echo "ℹ️  $LOCAL_ZSHRC not found, falling back to GitHub..."
-  curl --silent --fail --output "$REMOTE_ZSHRC" "$REMOTE_URL" \
+  # --noproxy '*' bypasses any HTTP(S)_PROXY env vars (corp-proxy machines)
+  curl --noproxy '*' --silent --fail --output "$REMOTE_ZSHRC" "$REMOTE_URL" \
     && echo "✅ Downloaded latest zshrc from GitHub" \
     || echo "❌ Failed to download remote zshrc!"
   [[ -f "$REMOTE_ZSHRC" ]] && source "$REMOTE_ZSHRC"
@@ -35,5 +36,9 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 # --- 5. Completions (only once) ---
 autoload -Uz compinit
 compinit
+
+# --- 6. fzf key bindings (Ctrl+R history search) ---
+[[ -f "$(brew --prefix 2>/dev/null)/opt/fzf/shell/key-bindings.zsh" ]] \
+  && source "$(brew --prefix)/opt/fzf/shell/key-bindings.zsh"
 
 echo "✅ Loaded custom .zshrc"
