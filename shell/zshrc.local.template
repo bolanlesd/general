@@ -8,7 +8,7 @@ bindkey -e  # Use Emacs mode for normal typing and Option + Arrow navigation
 # --- 2. Load main zshrc (prefer local clone, fall back to GitHub) ---
 LOCAL_ZSHRC=~/git/general/shell/zshrc
 REMOTE_ZSHRC=~/local_copy_zshrc
-REMOTE_URL="https://raw.githubusercontent.com/bolanlesd/general/master-mac/shell/zshrc"
+REMOTE_URL="https://raw.githubusercontent.com/bolanlesd/general/master-mac/dist/zshrc"
 
 if [[ -f "$LOCAL_ZSHRC" ]]; then
   source "$LOCAL_ZSHRC"
@@ -32,6 +32,12 @@ PROMPT='%F{yellow}%* %F{blue}%~ %F{green}${vcs_info_msg_0_}%f $ '
 
 # --- 4. Homebrew path ---
 eval "$(/opt/homebrew/bin/brew shellenv)"
+
+# --- 4.5 ~/.local/bin (general CLI lives here) ---
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
 
 # --- 5. Completions (only once) ---
 autoload -Uz compinit

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# pre-commit hook: rebuild dist/zshrc if any shell/parts/*.zsh is staged,
+# stage the regenerated file, and abort with a hint if it wasn't already up to date.
+set -euo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+changed_parts=$(git diff --cached --name-only | grep -E '^shell/parts/.*\.zsh$' || true)
+
+if [ -n "$changed_parts" ]; then
+  bash "$REPO_ROOT/scripts/build-zshrc.sh" >/dev/null
+  if ! git diff --quiet dist/zshrc; then
+    git add dist/zshrc
+    echo "🔁 dist/zshrc rebuilt and staged."
+  fi
+fi
