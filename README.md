@@ -1,44 +1,66 @@
-# REPO FOR AWESOME TECHY TECHY STUFF
+# general — personal toolbox
 
-This is just a place where I put things that I often use for work and play.
+Shell config, dotfiles, scripts, infra snippets, and notes I use across machines.
 
-## .bashrc and .vimrc
-just useful stuff to both, either append them or add them with source
+## Layout
 
-### plugin stuff for vim
-
-
-# https://github.com/junegunn/vim-plug
-### plugin commands
+| Path | Contents |
 |---|---|
-|Command|Description|
+| [install.sh](install.sh) | Symlinks dotfiles into `$HOME` and installs the `~/.zshrc` bootstrap. |
+| [shell/zshrc](shell/zshrc) | **Main zsh config.** Sourced by `~/.zshrc`. |
+| [shell/zshrc.local.template](shell/zshrc.local.template) | The slim `~/.zshrc`. Prefers the local clone; falls back to fetching `shell/zshrc` from GitHub. |
+| [shell/bashrc](shell/bashrc) | bash equivalent. |
+| [dotfiles/](dotfiles/) | [vimrc](dotfiles/vimrc), [tmux.conf](dotfiles/tmux.conf) — symlinked into `$HOME` by `install.sh`. |
+| [scripts/](scripts/) | Standalone executable helpers: [youtube-download.sh](scripts/youtube-download.sh), [azdo-create-sprints.sh](scripts/azdo-create-sprints.sh), [aws/](scripts/aws/), [windows/](scripts/windows/). |
+| [infra/](infra/) | [docker/](infra/docker/), [compose/](infra/compose/), [k8s/](infra/k8s/) examples. |
+| [notes/](notes/) | Cheatsheets / reference: [teleport.md](notes/teleport.md), [tmux.md](notes/tmux.md), [useful-commands.md](notes/useful-commands.md). |
+| [sandbox/](sandbox/) | Throwaway experiments (e.g. `csharp-testproject`). Build artifacts are gitignored. |
+
+## Setup on a new machine
+
+```sh
+git clone https://github.com/bolanlesd/general.git ~/git/playground/general
+cd ~/git/playground/general
+./install.sh
+exec zsh
+```
+
+`install.sh` will:
+1. Symlink `dotfiles/vimrc` → `~/.vimrc` and `dotfiles/tmux.conf` → `~/.tmux.conf` (backing up existing files).
+2. Install [shell/zshrc.local.template](shell/zshrc.local.template) as `~/.zshrc` if not already present. On machines with the repo cloned at `~/git/playground/general` it sources [shell/zshrc](shell/zshrc) directly; otherwise it downloads it from the `my-mac` branch on GitHub.
+
+## Updating
+
+- Edit [shell/zshrc](shell/zshrc). On this machine the change is live in the next shell (no commit needed). For other machines: commit + push, they pick it up next shell start.
+- Edit a dotfile in [dotfiles/](dotfiles/) — symlink means the change is live immediately on this machine.
+- Keep [shell/zshrc](shell/zshrc) self-contained — remote machines fetch only this one file.
+
+## Vim plug commands
+
+Plugin manager: <https://github.com/junegunn/vim-plug>
+
+| Command | Description |
 |---|---|
-|PlugInstall|[name ...] [#threads ] Install plugins|
-|PlugUpdate|[name ...] [#threads] Install or update plugin|
-|PlugClean[!]|Remove unlisted plugins (bang version will clean without prompt)|
-|PlugUpgrade|Upgrade vim-plug itself|
-|PlugStatus|Check the status of plugins|
-|PlugDiff|Examine changes from the previous update and the pending changes|
-|PlugSnapshot[!]|[output path] 	Generate script for restoring the current snapshot of the plugins|
-|---|---|
+| `PlugInstall [name ...] [#threads]` | Install plugins |
+| `PlugUpdate [name ...] [#threads]` | Install or update plugins |
+| `PlugClean[!]` | Remove unlisted plugins (bang = no prompt) |
+| `PlugUpgrade` | Upgrade vim-plug itself |
+| `PlugStatus` | Check plugin status |
+| `PlugDiff` | Examine changes from previous update and pending changes |
+| `PlugSnapshot[!] [output path]` | Generate script to restore current snapshot |
 
+## Windows + Hyper-V Ubuntu VM
 
-## Windows
-in my current role I have to use windows so all my Linux magic happens on a VM, here's how I set everything up
-1. Install hyper-v if you don't already have it
-1. Download your prefered linux distro, I use Ubuntu server
-1. Setup your instance via hyper-v
-1. Hyper-v doesn't automatically give the IP of Linux instance because... reasons? `¯\_(ツ)_/`  Whatever the reason the instructions to see the IP are here
-   * run this in the terminal
-     * `sudo apt-get install "linux-cloud-tools-$(uname -r)"`
-     * you may have to play around with this a bit, install some other stuff and/or restart your machine
-   * Congratulations now you can get the IP and ssh in
-1. Next you'll need to mount a shared directory (directory!!!! Not folder, we're engineers not users)
-   1. this URL covers the windows side far better than I can
-      * https://linuxhint.com/shared_folders_hypver-v_ubuntu_guest/
-      * You can ignore the Linux step, that's in step 2
-   1. add this to your bashrc
-       * `alias msha="sudo mount -t cifs //<computer name>/<path to shared directory> ~/shared -o user=$(whoami),uid=$UID,gid=$(getent group $(whoami) | cut -d ':' -f3)"`
-   1. restart your bash and msha should automatically mount the directory
-       * You'll probably notice that everything has execute, not sure why that is the case yet or how to fix it
+Old notes from a previous role — kept for reference:
 
+1. Install Hyper-V.
+2. Download a Linux distro (Ubuntu Server works well) and create the VM.
+3. Hyper-V doesn't surface the guest IP by default. In the guest run:
+   ```sh
+   sudo apt-get install "linux-cloud-tools-$(uname -r)"
+   ```
+   May need a reboot. Then the IP is visible in Hyper-V Manager and you can SSH in.
+4. Mount a shared directory from the host: see <https://linuxhint.com/shared_folders_hypver-v_ubuntu_guest/> for the Windows side, then on the guest:
+   ```sh
+   alias msha="sudo mount -t cifs //<computer name>/<share path> ~/shared -o user=$(whoami),uid=$UID,gid=$(getent group $(whoami) | cut -d ':' -f3)"
+   ```

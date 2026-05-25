@@ -1,0 +1,10 @@
+# C# build artifacts
+**/bin/
+**/obj/
+
+# macOS
+.DS_Store
+
+# Editor swap files
+*.swp
+*.swo
