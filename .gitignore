@@ -1,6 +1,11 @@
-# C# build artifacts
-**/bin/
+# C# build artifacts (scoped to sandbox so it doesn't catch our top-level bin/)
+sandbox/**/bin/
+sandbox/**/obj/
 **/obj/
+
+# Don't ignore the general CLI directory at the repo root
+!bin/
+!bin/**
 
 # macOS
 .DS_Store

@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# general — meta CLI for the ~/git/general toolbox
+# Subcommands:
+#   install         install/refresh ~/.zshrc bootstrap + symlinks
+#   update          git pull && rebuild dist/zshrc
+#   build           rebuild dist/zshrc from shell/parts/*.zsh
+#   doctor          health-check: brew, fzf, repo path, ~/.zshrc, symlinks
+#   edit [thing]    open repo (or a specific part) in $EDITOR
+#   help            list all custom functions/aliases
+#   use-starship    enable starship prompt (writes to ~/.zshrc.local)
+#   version         print the current commit SHA
+set -euo pipefail
+
+REPO_ROOT="${GENERAL_REPO_ROOT:-$HOME/git/general}"
+
+cmd="${1:-help}"; shift || true
+
+case "$cmd" in
+  install)
+    "$REPO_ROOT/install.sh"
+    ;;
+  update)
+    git -C "$REPO_ROOT" pull --ff-only
+    "$REPO_ROOT/scripts/build-zshrc.sh"
+    echo "🔁 Reload your shell: exec zsh"
+    ;;
+  build)
+    "$REPO_ROOT/scripts/build-zshrc.sh"
+    ;;
+  doctor)
+    ok=0; fail=0
+    check() { if eval "$2" >/dev/null 2>&1; then echo "  ✅ $1"; ok=$((ok+1)); else echo "  ❌ $1"; fail=$((fail+1)); fi; }
+    echo "── general doctor ──"
+    check "repo present at $REPO_ROOT"    "[ -d '$REPO_ROOT/.git' ]"
+    check "shell/parts/ populated"        "ls '$REPO_ROOT/shell/parts/'*.zsh"
+    check "dist/zshrc exists"             "[ -f '$REPO_ROOT/dist/zshrc' ]"
+    check "\$HOME/.zshrc installed"        "[ -f '$HOME/.zshrc' ]"
+    check "\$HOME/.zshrc points at clone"  "grep -q 'git/general' '$HOME/.zshrc'"
+    check "brew available"                "command -v brew"
+    check "fzf available"                 "command -v fzf"
+    check "git available"                 "command -v git"
+    check "az CLI available (for create_pr)" "command -v az"
+    check "jq available (for create_pr)"  "command -v jq"
+    echo "──────────────────"
+    echo "  passed: $ok   failed: $fail"
+    [ "$fail" -eq 0 ]
+    ;;
+  edit)
+    target="${1:-$REPO_ROOT}"
+    if [ -f "$REPO_ROOT/shell/parts/$target" ]; then
+      target="$REPO_ROOT/shell/parts/$target"
+    fi
+    "${EDITOR:-vim}" "$target"
+    ;;
+  help|--help|-h)
+    sed -n '2,12p' "$0"
+    ;;
+  use-starship)
+    if ! command -v starship &>/dev/null; then
+      echo "❌ starship not installed. Run: brew install starship"; exit 1
+    fi
+    touch "$HOME/.zshrc.local"
+    if grep -q 'starship init zsh' "$HOME/.zshrc.local"; then
+      echo "ℹ️  starship already enabled in ~/.zshrc.local"
+    else
+      echo 'eval "$(starship init zsh)"' >> "$HOME/.zshrc.local"
+      echo "✅ Added starship init to ~/.zshrc.local — reload your shell."
+    fi
+    ;;
+  version)
+    git -C "$REPO_ROOT" rev-parse --short HEAD
+    ;;
+  *)
+    echo "Unknown subcommand: $cmd" >&2
+    sed -n '2,12p' "$0" >&2
+    exit 1
+    ;;
+esac
