@@ -1,6 +1,6 @@
 # general — personal toolbox
 
-Shell config, dotfiles, scripts, infra snippets, and notes I use across machines.
+Shell config, dotfiles, scripts, and notes I use across machines.
 Everything is wired up with one command, syntax-checked in CI, and self-documenting.
 
 ## TL;DR
@@ -48,13 +48,11 @@ help                # list every custom function/alias
 | [shell/bashrc](shell/bashrc) | bash equivalent. |
 | [dist/zshrc](dist/zshrc) | Auto-generated single-file build used by the offline fallback. |
 | [dotfiles/](dotfiles/) | [vimrc](dotfiles/vimrc), [tmux.conf](dotfiles/tmux.conf) — symlinked into `$HOME`. |
-| [scripts/](scripts/) | Standalone helpers: [youtube-download.sh](scripts/youtube-download.sh), [teleport.sh](scripts/teleport.sh), [th-overrides.sh](scripts/th-overrides.sh), [build-zshrc.sh](scripts/build-zshrc.sh), [aws/](scripts/aws/), [windows/](scripts/windows/), [git-hooks/](scripts/git-hooks/). |
-| [infra/](infra/) | [docker/](infra/docker/), [compose/](infra/compose/), [k8s/](infra/k8s/) examples. |
+| [scripts/](scripts/) | Standalone helpers: [youtube-download.sh](scripts/youtube-download.sh), [teleport.sh](scripts/teleport.sh), [th-overrides.sh](scripts/th-overrides.sh), [azdo-create-sprints.sh](scripts/azdo-create-sprints.sh), [build-zshrc.sh](scripts/build-zshrc.sh), [git-hooks/](scripts/git-hooks/). |
 | [docs/](docs/) | [secrets.md](docs/secrets.md) (sops+age), [direnv.md](docs/direnv.md), [starship.md](docs/starship.md). |
 | [notes/](notes/) | Cheatsheets — [teleport.md](notes/teleport.md), [tmux.md](notes/tmux.md), [useful-commands.md](notes/useful-commands.md). |
 | [tests/](tests/) | bats tests. Run with `bats tests/`. |
 | [.github/workflows/](.github/workflows/) | CI: shellcheck + zsh syntax + bats. |
-| [sandbox/](sandbox/) | Throwaway experiments (gitignored builds). |
 
 ## shell/parts/ — modular config
 
