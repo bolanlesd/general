@@ -192,3 +192,264 @@ EOF
 
   rm -f "$TMP_OUTPUT"
 }
+
+# ---------------------------------------------------------------------------
+# create_sprints — Azure DevOps sprint creation helper
+# Usage: create_sprints [--org ORG] [--project PROJECT] [--count N]
+#                       [--prefix NAME] [--start YYYY-MM-DD] [--cadence DAYS]
+#                       [--next N] [--dry-run] [--help]
+# desc: create_sprints [opts] — create Azure DevOps sprints with auto-seeded work items
+# ---------------------------------------------------------------------------
+function create_sprints() {
+  # ── defaults (match existing script) ──────────────────────────────────────
+  local ORG="${AZDO_ORG:-}"
+  local PROJECT="${AZDO_PROJECT:-}"
+  local TEAM="${AZDO_TEAM:-Architecture Team}"
+  local ITER_ROOT="${AZDO_ITER_ROOT:-Youlend-Infrastructure}"
+  local COUNT=5
+  local CADENCE=14
+  local NEXT_SPRINT=18
+  local START=""
+  local PREFIX="Architecture Sprint"
+  local DRY_RUN=0
+  local VERBOSE=0
+
+  # ── help ──────────────────────────────────────────────────────────────────
+  _cs_help() {
+    cat <<'EOF'
+create_sprints — create Azure DevOps sprints and seed default work items.
+
+USAGE
+  create_sprints [OPTIONS]
+
+OPTIONS
+  --org      ORG          Azure DevOps org URL (or set AZDO_ORG env var)
+  --project  PROJECT      Azure DevOps project  (or set AZDO_PROJECT env var)
+  --team     TEAM         Team name [default: "Architecture Team"]
+  --root     ITER_ROOT    Iteration root path [default: "Youlend-Infrastructure"]
+  --prefix   PREFIX       Sprint name prefix [default: "Architecture Sprint"]
+  --next     N            Starting sprint number [default: 18]
+  --count    N            Number of sprints to create [default: 5]
+  --start    YYYY-MM-DD   Start date of the first new sprint
+  --cadence  DAYS         Sprint length in days [default: 14]
+  -n, --dry-run           Preview sprints without creating them
+  -v, --verbose           Show timestamps and extra detail
+  -h, --help              Show this help and exit
+
+ENVIRONMENT
+  AZDO_ORG        default --org value
+  AZDO_PROJECT    default --project value
+  AZDO_TEAM       default --team value
+  AZDO_ITER_ROOT  default --root value
+  AZURE_DEVOPS_EXT_PAT  Personal Access Token (required by az devops)
+
+EXAMPLES
+  create_sprints --next 18 --count 3 --start 2025-09-03
+  create_sprints --org https://dev.azure.com/myorg --project MyProj --dry-run
+EOF
+  }
+
+  # ── log helper ────────────────────────────────────────────────────────────
+  _cs_log() {
+    local level="$1"; shift
+    local ts; ts=$(date '+%Y-%m-%dT%H:%M:%S')
+    case "$level" in
+      INFO)  echo "  [${ts}] ℹ️  $*" ;;
+      OK)    echo "  [${ts}] ✅ $*" ;;
+      DRY)   echo "  [${ts}] 🧪 [DRY-RUN] $*" ;;
+      WARN)  echo "  [${ts}] ⚠️  $*" >&2 ;;
+      ERROR) echo "  [${ts}] ❌ $*" >&2 ;;
+    esac
+  }
+
+  # ── arg parsing ───────────────────────────────────────────────────────────
+  while (( $# )); do
+    case "$1" in
+      -h|--help)    _cs_help; return 0 ;;
+      --org)        ORG="$2";          shift 2 ;;
+      --project)    PROJECT="$2";      shift 2 ;;
+      --team)       TEAM="$2";         shift 2 ;;
+      --root)       ITER_ROOT="$2";    shift 2 ;;
+      --prefix)     PREFIX="$2";       shift 2 ;;
+      --next)       NEXT_SPRINT="$2";  shift 2 ;;
+      --count)      COUNT="$2";        shift 2 ;;
+      --start)      START="$2";        shift 2 ;;
+      --cadence)    CADENCE="$2";      shift 2 ;;
+      -n|--dry-run) DRY_RUN=1;         shift ;;
+      -v|--verbose) VERBOSE=1;         shift ;;
+      *) echo "Unknown option: $1. Use --help for usage." >&2; return 1 ;;
+    esac
+  done
+
+  # ── validate required tools ───────────────────────────────────────────────
+  if ! command -v az &>/dev/null; then
+    _cs_log ERROR "'az' CLI not found. Install with: brew install azure-cli"
+    return 1
+  fi
+  if ! az extension show --name azure-devops &>/dev/null; then
+    _cs_log ERROR "azure-devops extension missing. Run: az extension add --name azure-devops"
+    return 1
+  fi
+
+  # ── validate PAT ──────────────────────────────────────────────────────────
+  if [[ -z "${AZURE_DEVOPS_EXT_PAT:-}" ]]; then
+    _cs_log WARN "AZURE_DEVOPS_EXT_PAT is not set — az devops may prompt for credentials."
+  fi
+
+  # ── validate / default org + project ─────────────────────────────────────
+  if [[ -z "$ORG" ]]; then
+    # try to read from az devops defaults
+    ORG=$(az devops configure --list 2>/dev/null | awk -F= '/^organization/{gsub(/ /,"",$2); print $2}')
+  fi
+  if [[ -z "$PROJECT" ]]; then
+    PROJECT=$(az devops configure --list 2>/dev/null | awk -F= '/^project/{gsub(/ /,"",$2); print $2}')
+  fi
+  if [[ -z "$ORG" || -z "$PROJECT" ]]; then
+    _cs_log ERROR "Cannot determine org/project. Pass --org and --project, set AZDO_ORG/AZDO_PROJECT, or run: az devops configure --defaults organization=URL project=NAME"
+    return 1
+  fi
+
+  # ── validate numeric inputs ────────────────────────────────────────────────
+  if ! [[ "$COUNT" =~ ^[0-9]+$ ]] || (( COUNT < 1 )); then
+    _cs_log ERROR "--count must be a positive integer (got: $COUNT)"
+    return 1
+  fi
+  if ! [[ "$CADENCE" =~ ^[0-9]+$ ]] || (( CADENCE < 1 )); then
+    _cs_log ERROR "--cadence must be a positive integer (got: $CADENCE)"
+    return 1
+  fi
+  if ! [[ "$NEXT_SPRINT" =~ ^[0-9]+$ ]]; then
+    _cs_log ERROR "--next must be an integer (got: $NEXT_SPRINT)"
+    return 1
+  fi
+
+  # ── default start date: today if not set ─────────────────────────────────
+  if [[ -z "$START" ]]; then
+    START=$(date '+%Y-%m-%d')
+    _cs_log WARN "--start not provided; defaulting to today ($START)"
+  fi
+  # validate date format
+  if ! date -j -f '%Y-%m-%d' "$START" '+%Y-%m-%d' &>/dev/null 2>&1 && \
+     ! date -d "$START" '+%Y-%m-%d' &>/dev/null 2>&1; then
+    _cs_log ERROR "--start '$START' is not a valid YYYY-MM-DD date"
+    return 1
+  fi
+
+  # ── portable date arithmetic (macOS vs Linux) ─────────────────────────────
+  _cs_add_days() {
+    local base="$1" days="$2"
+    if date -v+0d &>/dev/null 2>&1; then
+      # macOS BSD date
+      date -j -v+"${days}"d -f '%Y-%m-%d' "$base" '+%Y-%m-%d'
+    else
+      # GNU date
+      date -I -d "$base +${days} days"
+    fi
+  }
+
+  # ── summary ───────────────────────────────────────────────────────────────
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "  Azure DevOps Sprint Bootstrap"
+  [[ "$DRY_RUN" = "1" ]] && echo "  MODE: DRY-RUN (no changes will be made)"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "  Org:          $ORG"
+  echo "  Project:      $PROJECT"
+  echo "  Team:         $TEAM"
+  echo "  Iter root:    $ITER_ROOT"
+  echo "  Prefix:       $PREFIX"
+  echo "  Sprints:      $NEXT_SPRINT → $((NEXT_SPRINT + COUNT - 1))  ($COUNT total)"
+  echo "  Cadence:      ${CADENCE} days"
+  echo "  Start date:   $START"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+
+  local -a AZ_GLOBAL
+  AZ_GLOBAL=(--org "$ORG" --project "$PROJECT")
+
+  local CREATED=0 FAILED=0
+  local n sd ed NAME ITER_PATH TITLE
+  for (( i=0; i<COUNT; i++ )); do
+    n=$(( NEXT_SPRINT + i ))
+    sd=$(_cs_add_days "$START" $(( i * CADENCE )))
+    ed=$(_cs_add_days "$sd"    $(( CADENCE - 1 )))
+    NAME="${PREFIX} ${n}"
+    ITER_PATH="\\${ITER_ROOT}\\${NAME}"
+
+    echo "  🌀  $NAME   $sd → $ed"
+
+    if [[ "$DRY_RUN" = "1" ]]; then
+      _cs_log DRY "Would create iteration: $NAME ($sd → $ed)"
+      _cs_log DRY "Would add to team '$TEAM' at path: $ITER_PATH"
+      _cs_log DRY "Would seed: 'BAU Sprint $n'  +  'Trainings Sprint $n'"
+      echo ""
+      continue
+    fi
+
+    # 1) Create project-level iteration
+    [[ "$VERBOSE" = "1" ]] && _cs_log INFO "Creating project iteration..."
+    if ! az boards iteration project create \
+        "${AZ_GLOBAL[@]}"        \
+        --name "$NAME"           \
+        --path "\\${ITER_ROOT}"  \
+        --start-date "$sd"       \
+        --finish-date "$ed"      \
+        --output none 2>/tmp/_cs_err; then
+      _cs_log ERROR "Failed to create iteration '$NAME': $(cat /tmp/_cs_err)"
+      (( FAILED++ )) || true
+      continue
+    fi
+    [[ "$VERBOSE" = "1" ]] && _cs_log OK "Iteration created"
+
+    # 2) Add to team backlog
+    [[ "$VERBOSE" = "1" ]] && _cs_log INFO "Adding to team backlog..."
+    if ! az boards iteration team add \
+        "${AZ_GLOBAL[@]}"             \
+        --team "$TEAM"                \
+        --path "$ITER_PATH"           \
+        --output none 2>/tmp/_cs_err; then
+      _cs_log WARN "Could not add '$NAME' to team '$TEAM': $(cat /tmp/_cs_err)"
+    fi
+
+    # 3) Set as active
+    [[ "$VERBOSE" = "1" ]] && _cs_log INFO "Setting as active iteration..."
+    az boards iteration team set \
+        "${AZ_GLOBAL[@]}"        \
+        --team "$TEAM"           \
+        --path "$ITER_PATH"      \
+        --output none 2>/dev/null || true
+
+    # 4) Seed default work items
+    for TITLE in "BAU Sprint $n" "Trainings Sprint $n"; do
+      [[ "$VERBOSE" = "1" ]] && _cs_log INFO "Seeding work item: $TITLE"
+      if ! az boards work-item create      \
+          "${AZ_GLOBAL[@]}"                \
+          --type "User Story"              \
+          --title "$TITLE"                 \
+          --iteration-path "$ITER_PATH"    \
+          --description "Auto-seeded by sprint bootstrap script" \
+          --output none 2>/tmp/_cs_err; then
+        _cs_log WARN "Could not seed '$TITLE': $(cat /tmp/_cs_err)"
+      fi
+    done
+
+    _cs_log OK "$NAME created and seeded."
+    (( CREATED++ )) || true
+    echo ""
+  done
+
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  if [[ "$DRY_RUN" = "1" ]]; then
+    echo "  🧪 Dry-run complete — $COUNT sprint(s) previewed, none created."
+  else
+    echo "  ✅ Done: $CREATED created, $FAILED failed."
+  fi
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+
+  rm -f /tmp/_cs_err
+  [[ "$FAILED" -gt 0 ]] && return 1 || return 0
+}
+
+# Convenience alias
+alias create-sprints='create_sprints'

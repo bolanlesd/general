@@ -1,40 +1,26 @@
-# ---------- CONFIG ----------------------------------------------------------
-TEAM="Architecture Team"
-ITER_ROOT="Youlend-Infrastructure"          # root node shown in Boards → Project configuration
-NEXT_SPRINT=18                              # create 18, 19, 20… etc.
-COUNT=5                                     # how many new sprints
-CADENCE=14                                  # days per sprint
-START="2025-09-03"                          # first sprint start date (yyyy-mm-dd)
-# ----------------------------------------------------------------------------
+#!/usr/bin/env zsh
+# azdo-create-sprints.sh — standalone wrapper around the create_sprints function
+#
+# This script sources the shared Azure DevOps zsh module and invokes the
+# create_sprints function. All flags are forwarded. Run with --help for usage.
+#
+# Examples:
+#   ./azdo-create-sprints.sh --help
+#   ./azdo-create-sprints.sh --next 18 --count 3 --start 2025-09-03 --dry-run
+#   ./azdo-create-sprints.sh --org https://dev.azure.com/myorg --project MyProj
 
-for ((i=0;i<$COUNT;i++)); do
-  n=$((NEXT_SPRINT+i))
-  sd=$(date -I -d "$START +$((i*CADENCE)) days")
-  ed=$(date -I -d "$sd +$((CADENCE-1)) days")
+set -euo pipefail
 
-  NAME="Architecture Sprint $n"
-  PATH="\\$ITER_ROOT\\$NAME"
+GENERAL_PARTS_DIR="${GENERAL_PARTS_DIR:-$HOME/git/general/shell/parts}"
+MODULE="${GENERAL_PARTS_DIR}/60-azure-devops.zsh"
 
-  echo "🌀  Creating $NAME  $sd → $ed"
+if [[ ! -r "$MODULE" ]]; then
+  echo "❌ Cannot find azure-devops module at: $MODULE" >&2
+  echo "   Set GENERAL_PARTS_DIR or clone the general repo to ~/git/general" >&2
+  exit 1
+fi
 
-  # 1) Project-level iteration
-  az boards iteration project create           \
-        --name "$NAME"                         \
-        --path "\\$ITER_ROOT"                  \
-        --start-date "$sd" --finish-date "$ed"
+# shellcheck disable=SC1090
+source "$MODULE"
 
-  # 2) Add to team & set as active
-  az boards iteration team add                 \
-        --team "$TEAM" --path "$PATH"
-  az boards iteration team set                 \
-        --team "$TEAM" --path "$PATH"
-
-  # 3) Seed two default User Stories
-  for T in "BAU Sprint $n" "Trainings Sprint $n"; do
-    az boards work-item create \
-        --type "User Story"    \
-        --title "$T"           \
-        --iteration-path "$PATH" \
-        --description "Auto-seeded by sprint bootstrap script"
-  done
-done
+create_sprints "$@"
