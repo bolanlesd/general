@@ -450,7 +450,8 @@ DELEGATING TO AN AI AGENT
     5. After creation, verify each new sprint has:
          - iteration at \Youlend-Infrastructure\Iteration\Architecture Sprint M
          - team assignment on "Architecture Team"
-         - two User Story work items: "BAU Sprint M" and "Training Sprint M"
+         - three User Story work items:
+             "KTLO Sprint M", "Non-KTLO Sprint M", "Training Sprint M"
          - work-item area = "Youlend-Infrastructure\Architecture Team"
        Report the work item IDs and any failures.
 
@@ -591,7 +592,7 @@ EOF
   AZ_GLOBAL=(--org "$ORG" --project "$PROJECT")
 
   local CREATED=0 FAILED=0
-  local n sd ed NAME ITER_PATH TITLE
+  local n sd ed NAME ITER_PATH TITLE ITER_JSON ITER_ID WI_ITERATION
   for (( i=0; i<COUNT; i++ )); do
     n=$(( NEXT_SPRINT + i ))
     sd=$(_cs_add_days "$START" $(( i * CADENCE )))
@@ -604,14 +605,13 @@ EOF
     if [[ "$DRY_RUN" = "1" ]]; then
       _cs_log DRY "Would create iteration: $NAME ($sd → $ed)"
       _cs_log DRY "Would add to team '$TEAM' at path: $ITER_PATH"
-      _cs_log DRY "Would seed: 'BAU Sprint $n'  +  'Training Sprint $n'"
+      _cs_log DRY "Would seed: 'KTLO Sprint $n'  +  'Non-KTLO Sprint $n'  +  'Training Sprint $n'"
       echo ""
       continue
     fi
 
     # 1) Create project-level iteration (capture identifier for later steps)
     [[ "$VERBOSE" = "1" ]] && _cs_log INFO "Creating project iteration..."
-    local ITER_JSON ITER_ID
     if ! ITER_JSON=$(az boards iteration project create \
         "${AZ_GLOBAL[@]}"        \
         --name "$NAME"           \
@@ -655,8 +655,8 @@ EOF
     # Work-item --iteration expects "<project>\<iteration_name>" (no leading
     # backslash, no \Iteration\ tier), distinct from the classification path
     # used for iteration management above.
-    local WI_ITERATION="${PROJECT}\\${NAME}"
-    for TITLE in "BAU Sprint $n" "Training Sprint $n"; do
+    WI_ITERATION="${PROJECT}\\${NAME}"
+    for TITLE in "KTLO Sprint $n" "Non-KTLO Sprint $n" "Training Sprint $n"; do
       [[ "$VERBOSE" = "1" ]] && _cs_log INFO "Seeding work item: $TITLE"
       if ! az boards work-item create      \
           "${AZ_GLOBAL[@]}"                \
