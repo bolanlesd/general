@@ -205,7 +205,13 @@ function create_sprints() {
   local ORG="${AZDO_ORG:-}"
   local PROJECT="${AZDO_PROJECT:-}"
   local TEAM="${AZDO_TEAM:-Architecture Team}"
-  local ITER_ROOT="${AZDO_ITER_ROOT:-Youlend-Infrastructure}"
+  # Parent iteration path under which new sprints will be created.
+  # az boards expects a project-prefixed absolute path, e.g.
+  #   \Youlend-Infrastructure\Iteration
+  local ITER_ROOT="${AZDO_ITER_ROOT:-Youlend-Infrastructure\\Iteration}"
+  # Area path for seeded work items (project-relative, e.g. "Architecture Team").
+  # Defaults to the team name when unset.
+  local AREA="${AZDO_AREA:-}"
   local COUNT=5
   local CADENCE=14
   local NEXT_SPRINT=18
@@ -226,7 +232,8 @@ OPTIONS
   --org      ORG          Azure DevOps org URL (or set AZDO_ORG env var)
   --project  PROJECT      Azure DevOps project  (or set AZDO_PROJECT env var)
   --team     TEAM         Team name [default: "Architecture Team"]
-  --root     ITER_ROOT    Iteration root path [default: "Youlend-Infrastructure"]
+  --root     ITER_ROOT    Iteration parent path [default: "Youlend-Infrastructure\\Iteration"]
+  --area     AREA         Area path for seeded work items (project-relative) [default: TEAM]
   --prefix   PREFIX       Sprint name prefix [default: "Architecture Sprint"]
   --next     N            Starting sprint number [default: 18]
   --count    N            Number of sprints to create [default: 5]
@@ -241,6 +248,7 @@ ENVIRONMENT
   AZDO_PROJECT    default --project value
   AZDO_TEAM       default --team value
   AZDO_ITER_ROOT  default --root value
+  AZDO_AREA       default --area value
   AZURE_DEVOPS_EXT_PAT  Personal Access Token (required by az devops)
 
 EXAMPLES
@@ -270,6 +278,7 @@ EOF
       --project)    PROJECT="$2";      shift 2 ;;
       --team)       TEAM="$2";         shift 2 ;;
       --root)       ITER_ROOT="$2";    shift 2 ;;
+      --area)       AREA="$2";         shift 2 ;;
       --prefix)     PREFIX="$2";       shift 2 ;;
       --next)       NEXT_SPRINT="$2";  shift 2 ;;
       --count)      COUNT="$2";        shift 2 ;;
@@ -347,6 +356,10 @@ EOF
     fi
   }
 
+  # Default area path to the team name when not provided.
+  [[ -z "$AREA" ]] && AREA="$TEAM"
+  local WI_AREA="${PROJECT}\\${AREA}"
+
   # ── summary ───────────────────────────────────────────────────────────────
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -357,6 +370,7 @@ EOF
   echo "  Project:      $PROJECT"
   echo "  Team:         $TEAM"
   echo "  Iter root:    $ITER_ROOT"
+  echo "  Area path:    $WI_AREA"
   echo "  Prefix:       $PREFIX"
   echo "  Sprints:      $NEXT_SPRINT → $((NEXT_SPRINT + COUNT - 1))  ($COUNT total)"
   echo "  Cadence:      ${CADENCE} days"
@@ -381,52 +395,66 @@ EOF
     if [[ "$DRY_RUN" = "1" ]]; then
       _cs_log DRY "Would create iteration: $NAME ($sd → $ed)"
       _cs_log DRY "Would add to team '$TEAM' at path: $ITER_PATH"
-      _cs_log DRY "Would seed: 'BAU Sprint $n'  +  'Trainings Sprint $n'"
+      _cs_log DRY "Would seed: 'BAU Sprint $n'  +  'Training Sprint $n'"
       echo ""
       continue
     fi
 
-    # 1) Create project-level iteration
+    # 1) Create project-level iteration (capture identifier for later steps)
     [[ "$VERBOSE" = "1" ]] && _cs_log INFO "Creating project iteration..."
-    if ! az boards iteration project create \
+    local ITER_JSON ITER_ID
+    if ! ITER_JSON=$(az boards iteration project create \
         "${AZ_GLOBAL[@]}"        \
         --name "$NAME"           \
         --path "\\${ITER_ROOT}"  \
         --start-date "$sd"       \
         --finish-date "$ed"      \
-        --output none 2>/tmp/_cs_err; then
+        --output json 2>/tmp/_cs_err); then
       _cs_log ERROR "Failed to create iteration '$NAME': $(cat /tmp/_cs_err)"
       (( FAILED++ )) || true
       continue
     fi
-    [[ "$VERBOSE" = "1" ]] && _cs_log OK "Iteration created"
+    ITER_ID=$(printf '%s' "$ITER_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("identifier",""))' 2>/dev/null)
+    [[ "$VERBOSE" = "1" ]] && _cs_log OK "Iteration created (id: ${ITER_ID:-unknown})"
+
+    if [[ -z "$ITER_ID" ]]; then
+      _cs_log WARN "Could not parse iteration id; skipping team add / work-item seeding for '$NAME'"
+      (( CREATED++ )) || true
+      echo ""
+      continue
+    fi
 
     # 2) Add to team backlog
     [[ "$VERBOSE" = "1" ]] && _cs_log INFO "Adding to team backlog..."
     if ! az boards iteration team add \
         "${AZ_GLOBAL[@]}"             \
         --team "$TEAM"                \
-        --path "$ITER_PATH"           \
+        --id "$ITER_ID"               \
         --output none 2>/tmp/_cs_err; then
       _cs_log WARN "Could not add '$NAME' to team '$TEAM': $(cat /tmp/_cs_err)"
     fi
 
-    # 3) Set as active
-    [[ "$VERBOSE" = "1" ]] && _cs_log INFO "Setting as active iteration..."
-    az boards iteration team set \
+    # 3) Set as default iteration for the team
+    [[ "$VERBOSE" = "1" ]] && _cs_log INFO "Setting as default iteration..."
+    az boards iteration team set-default-iteration \
         "${AZ_GLOBAL[@]}"        \
         --team "$TEAM"           \
-        --path "$ITER_PATH"      \
+        --id "$ITER_ID"          \
         --output none 2>/dev/null || true
 
-    # 4) Seed default work items
-    for TITLE in "BAU Sprint $n" "Trainings Sprint $n"; do
+    # 4) Seed default work items.
+    # Work-item --iteration expects "<project>\<iteration_name>" (no leading
+    # backslash, no \Iteration\ tier), distinct from the classification path
+    # used for iteration management above.
+    local WI_ITERATION="${PROJECT}\\${NAME}"
+    for TITLE in "BAU Sprint $n" "Training Sprint $n"; do
       [[ "$VERBOSE" = "1" ]] && _cs_log INFO "Seeding work item: $TITLE"
       if ! az boards work-item create      \
           "${AZ_GLOBAL[@]}"                \
           --type "User Story"              \
           --title "$TITLE"                 \
-          --iteration-path "$ITER_PATH"    \
+          --iteration "$WI_ITERATION"      \
+          --area "$WI_AREA"                \
           --description "Auto-seeded by sprint bootstrap script" \
           --output none 2>/tmp/_cs_err; then
         _cs_log WARN "Could not seed '$TITLE': $(cat /tmp/_cs_err)"
