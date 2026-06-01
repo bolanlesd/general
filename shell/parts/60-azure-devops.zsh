@@ -254,6 +254,38 @@ ENVIRONMENT
 EXAMPLES
   create_sprints --next 18 --count 3 --start 2025-09-03
   create_sprints --org https://dev.azure.com/myorg --project MyProj --dry-run
+
+DELEGATING TO AN AI AGENT
+  Paste a prompt like the one below to ask an agent to run this for you:
+
+    Create the next 10 Architecture Sprints in Azure DevOps using the
+    create_sprints function from ~/git/general/shell/parts/60-azure-devops.zsh
+    (also exposed as the `create-sprints` alias and via
+    ~/git/general/scripts/azdo-create-sprints.sh).
+
+    1. Source the module (or call the wrapper script directly).
+    2. Find the highest existing "Architecture Sprint N" iteration under
+       \Youlend-Infrastructure\Iteration and compute --next as N+1.
+       Compute --start as (finish_date of sprint N) + 1 day.
+       Cadence is 14 days; do not override unless asked.
+    3. Run with --dry-run first and show me the preview.
+    4. Wait for my explicit "go" before running for real.
+    5. After creation, verify each new sprint has:
+         - iteration at \Youlend-Infrastructure\Iteration\Architecture Sprint M
+         - team assignment on "Architecture Team"
+         - two User Story work items: "BAU Sprint M" and "Training Sprint M"
+         - work-item area = "Youlend-Infrastructure\Architecture Team"
+       Report the work item IDs and any failures.
+
+    Defaults already baked into the function — do NOT override unless I ask:
+      --team   "Architecture Team"
+      --root   "Youlend-Infrastructure\Iteration"
+      --area   "Architecture Team"   (becomes "<project>\Architecture Team")
+      --prefix "Architecture Sprint"
+      --cadence 14
+
+    Required env: AZDO_ORG, AZDO_PROJECT (or `az devops configure --defaults`).
+    AZURE_DEVOPS_EXT_PAT must be set for non-interactive auth.
 EOF
   }
 
