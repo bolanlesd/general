@@ -45,6 +45,7 @@ alias lsd="ls -d */ | xargs du -chs | grep -v total"
 alias gr="cd \$(git rev-parse --show-toplevel)"
 alias ocp="pbcopy"
 alias yt-dl="bash ~/git/general/scripts/youtube-download.sh"
+alias yt-lyrics="bash ~/git/general/scripts/lyrics-transcribe.sh"
 alias rts="find . -not -path '*/\.*' | xargs -I {} sed -i '' 's/[[:space:]]*\$//' {}"
 
 # Prefer Cursor when available, fall back to VS Code

@@ -48,7 +48,7 @@ help                # list every custom function/alias
 | [shell/bashrc](shell/bashrc) | bash equivalent. |
 | [dist/zshrc](dist/zshrc) | Auto-generated single-file build used by the offline fallback. |
 | [dotfiles/](dotfiles/) | [vimrc](dotfiles/vimrc), [tmux.conf](dotfiles/tmux.conf) — symlinked into `$HOME`. |
-| [scripts/](scripts/) | Standalone helpers: [youtube-download.sh](scripts/youtube-download.sh), [teleport.sh](scripts/teleport.sh), [th-overrides.sh](scripts/th-overrides.sh), [azdo-create-sprints.sh](scripts/azdo-create-sprints.sh), [build-zshrc.sh](scripts/build-zshrc.sh), [git-hooks/](scripts/git-hooks/). |
+| [scripts/](scripts/) | Standalone helpers: [youtube-download.sh](scripts/youtube-download.sh), [lyrics-transcribe.sh](scripts/lyrics-transcribe.sh), [lyrics-format.py](scripts/lyrics-format.py), [teleport.sh](scripts/teleport.sh), [th-overrides.sh](scripts/th-overrides.sh), [azdo-create-sprints.sh](scripts/azdo-create-sprints.sh), [build-zshrc.sh](scripts/build-zshrc.sh), [git-hooks/](scripts/git-hooks/). |
 | [docs/](docs/) | [secrets.md](docs/secrets.md) (sops+age), [direnv.md](docs/direnv.md), [starship.md](docs/starship.md). |
 | [notes/](notes/) | Cheatsheets — [teleport.md](notes/teleport.md), [tmux.md](notes/tmux.md), [useful-commands.md](notes/useful-commands.md). |
 | [tests/](tests/) | bats tests. Run with `bats tests/`. |
@@ -103,6 +103,39 @@ general version         print current commit SHA
 - **Add a new script:** drop it in [scripts/](scripts/), make it executable. Then `g <name>` just works.
 - **Update another machine:** `general update` (= `git pull && general build`).
 - **Reproducible install on a fresh box:** `git clone … && ./install.sh && general doctor`.
+
+## Lyrics Transcription Workflow
+
+1. Install dependencies:
+
+  ```sh
+  brew install ffmpeg
+  python3 -m pip install --upgrade openai-whisper
+  ```
+
+2. Download audio and transcribe in one command:
+
+  ```sh
+  yt-dl "https://www.youtube.com/watch?v=VIDEO_ID" wav best --transcribe --lyrics-lang en
+  ```
+
+3. Or transcribe any local audio file:
+
+  ```sh
+  yt-lyrics ~/Documents/SJC_Songs/song.wav --model small --lang en
+  ```
+
+  You can also pass a YouTube URL directly:
+
+  ```sh
+  yt-lyrics "https://www.youtube.com/watch?v=VIDEO_ID" --model small --lang en
+  ```
+
+This creates:
+- `~/Documents/SJC_Lyrics/<song>.lyrics.tagged.txt` (retained output)
+
+Section labels are heuristic and may need quick manual cleanup for perfect song structure.
+The raw transcript JSON and plain stanza file are deleted after formatting.
 
 ## Extras (opt-in)
 
